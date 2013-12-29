@@ -6,67 +6,63 @@ module OmniAuth
   module Strategies
     class Baidu < OmniAuth::Strategies::OAuth2
       option :client_options, {
-        :site => 'https://api.github.com',
-        :authorize_url => 'https://github.com/login/oauth/authorize',
-        :token_url => 'https://github.com/login/oauth/access_token'
+        :site           => "https://openapi.baidu.com",
+        :authorize_url  => "/oauth/2.0/authorize",
+        :token_url      => "/oauth/2.0/token"
+      }
+      option :token_params, {
+        :parse          => :json
       }
 
-      def request_phase
-        super
+      uid do
+        raw_info['userid']
       end
-      
-      def authorize_params
-        super.tap do |params|
-          %w[scope client_options].each do |v|
-            if request.params[v]
-              params[v.to_sym] = request.params[v]
-            end
-          end
-        end
-      end
-
-      uid { raw_info['id'].to_s }
 
       info do
         {
-          'nickname' => raw_info['login'],
-          'email' => email,
-          'name' => raw_info['name'],
-          'image' => raw_info['avatar_url'],
-          'urls' => {
-            'GitHub' => "https://github.com/#{raw_info['login']}",
-            'Blog' => raw_info['blog'],
-          },
+          :nickname     => raw_info['realname'],
+          :name         => raw_info['username'],
+          :sex          => raw_info['sex'],
+          :birthday     => raw_info['birthday'],
+          :description  => raw_info['userdetail'],
+          :image => {
+            'small'      => "http://tb.himg.baidu.com/sys/portraitn/item/#{raw_info['url']}",
+            'large'     => "http://tb.himg.baidu.com/sys/portrait/item/#{raw_info['url']}",
+          }
         }
       end
 
       extra do
-        {:raw_info => raw_info}
+        {
+          :raw_info => raw_info
+        }
       end
 
       def raw_info
         access_token.options[:mode] = :query
-        @raw_info ||= access_token.get('user').parsed
+        access_token.options[:param_name] = 'access_token'
+        @uid ||= access_token.get('/rest/2.0/passport/users/getLoggedInUser').parsed["uid"]
+        @raw_info ||= access_token.get("/rest/2.0/passport/users/getInfo", :params => {:uid => @uid}).parsed
       end
 
-      def email
-         (email_access_allowed?) ? primary_email : raw_info['email']
-      end
+      ##
+      # You can pass +display+, +with_offical_account+ or +state+ params to the auth request, if
+      # you need to set them dynamically. You can also set these options
+      # in the OmniAuth config :authorize_params option.
+      #
+      # /auth/baidu?display=mobile&with_offical_account=1
+      #
+      def authorize_params
+        super.tap do |params|
+          %w[display with_offical_account state forcelogin].each do |v|
+            if request.params[v]
+              params[v.to_sym] = request.params[v]
 
-      def primary_email
-        primary = emails.find{|i| i['primary'] }
-        primary && primary['email'] || emails.first && emails.first['email']
-      end
-
-      # The new /user/emails API - http://developer.github.com/v3/users/emails/#future-response
-      def emails
-        return [] unless email_access_allowed?
-        access_token.options[:mode] = :query
-        @emails ||= access_token.get('user/emails', :headers => { 'Accept' => 'application/vnd.github.v3' }).parsed
-      end
-
-      def email_access_allowed?
-        options['scope'] =~ /user/
+              # to support omniauth-oauth2's auto csrf protection
+              session['omniauth.state'] = params[:state] if v == 'state'
+            end
+          end
+        end
       end
 
     end
