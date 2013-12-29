@@ -5,11 +5,13 @@ require 'omniauth-oauth2'
 module OmniAuth
   module Strategies
     class Baidu < OmniAuth::Strategies::OAuth2
+
       option :client_options, {
         :site           => "https://openapi.baidu.com",
         :authorize_url  => "/oauth/2.0/authorize",
         :token_url      => "/oauth/2.0/token"
       }
+      
       option :token_params, {
         :parse          => :json
       }
